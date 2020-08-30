@@ -261,13 +261,13 @@ class SqlAlchemyDB(object):
         self._session.bind.dispose()
         self._session = None
 
-    def read(self, table_name):
-        table = self._open_table_for_read(table_name)
+    def read(self, table_name, table_config=None):
+        table = self._open_table_for_read(table_name, table_config)
         for record in table.records(self._session):
             yield record
 
-    def query(self, table_name, query):
-        table = self._open_table_for_read(table_name)
+    def query(self, table_name, query, table_config=None):
+        table = self._open_table_for_read(table_name, table_config)
         for record in table.query_records(self._session, query):
             yield record
 
@@ -299,10 +299,11 @@ class SqlAlchemyDB(object):
                 create_insert_f = create_insert
         return create_insert_f
 
-    def _open_table_for_read(self, name):
+    def _open_table_for_read(self, name, table_config=None):
         return self._open_table(
             name=name,
-            get_table_f=load_table
+            get_table_f=load_table,
+            table_config=table_config
         )
 
     def _open_table_for_write(self, table_config, record):
@@ -375,18 +376,21 @@ class _Table(object):
             return {col: getattr(db_record, col) for col in self._column_names}
 
 
-def load_table(session, name):
+def load_table(session, name, table_config=None):
     table_class = None
     engine = session.bind
     if engine.dialect.has_table(engine, name):
         metadata = MetaData(bind=engine)
-        table_class = create_table_class(Table(name, metadata, autoload=True))
+        if table_config and table_config.define_table_f:
+            table_class = create_table_class(table_config.define_table_f(metadata))
+        else:
+            table_class = create_table_class(Table(name, metadata, autoload=True))
     return table_class
 
 
 def create_table(session, name, table_config, record):
     # Attempt to load from the DB
-    table_class = load_table(session, name)
+    table_class = load_table(session, name, table_config)
 
     if not table_class and table_config.create_table_if_missing:
         define_table_f = (

@@ -67,11 +67,12 @@ class ReadFromDB(PTransform):
         Where "name" and "num" are the column names.
     """
 
-    def __init__(self, source_config, table_name, query='', *args, **kwargs):
+    def __init__(self, source_config, table_name, query='', table_config=None, *args, **kwargs):
         super(ReadFromDB, self).__init__(*args, **kwargs)
         self._read_args = dict(
             source_config=source_config,
             table_name=table_name,
+            table_config=table_config,
             query=query
         )
 
@@ -87,16 +88,17 @@ class _ReadFromRelationalDBFn(DoFn):
     def process(self, element):
         db_args = dict(element)
         table_name = db_args.pop('table_name')
+        table_config = db_args.pop('table_config')
         query = db_args.pop('query')
 
         db = SqlAlchemyDB(**db_args)
         db.start_session()
         try:
             if query:
-                for record in db.query(table_name, query):
+                for record in db.query(table_name, query, table_config=table_config):
                     yield record
             else:
-                for record in db.read(table_name):
+                for record in db.read(table_name, table_config=table_config):
                     yield record
         except:
             raise
